@@ -1,3 +1,4 @@
+import logging
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DecimalType, DateType
@@ -5,6 +6,12 @@ import shutil
 import os
 import glob
 
+# Set up logging configuration
+logging.basicConfig(
+    level=logging.INFO,  # Logging level can be adjusted based on necessity (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format="%(asctime)s - %(levelname)s - %(message)s",  # Log message format
+)
+logger = logging.getLogger(__name__)
 
 # Create a Spark session
 spark = SparkSession.builder \
@@ -26,10 +33,15 @@ def read_csv_file_to_pyspark_dataframe(input_path):
     Returns:
     DataFrame: Loaded DataFrame.
     """
+
+    logger.info(f"Reading CSV file from {input_path}")
+
     df = spark.read.format("csv") \
         .option("header", "true") \
         .option("sep", ",") \
         .load(input_path)
+    
+    logger.info(f"Loaded CSV file from {input_path} with {df.count()} rows.")
 
     return df
 
@@ -45,16 +57,19 @@ def validate_schema(df, expected_schema):
         expected_schema (StructType): The expected schema that the DataFrame should comply with.
 
     Returns:
-        None: The function prints whether the schema of the DataFrame matches the expected schema.
+    None: The function uses logging to notify if the validation was successfull.
     """
+    
+    logger.info("Validating schema...")
+
     # Compare the schema of the DataFrame with the expected schema, ignoring order
     df_fields = set((field.name, field.dataType) for field in df.schema.fields)
     expected_fields = set((field.name, field.dataType) for field in expected_schema.fields)
 
     if df_fields == expected_fields:
-        print("Schemas match (order doesn't matter)!")
+        logger.info("Schemas match.")
     else:
-        print("Schemas do not match.")
+        logger.critical("Schemas match (order doesn't matter)!")
 
 # Products data validation
 def validate_products_data(df_products):
@@ -70,6 +85,10 @@ def validate_products_data(df_products):
     Returns:
     DataFrame: The input DataFrame after schema validation.
     """
+
+    logger.info("Validating product data...")
+
+
     # Expected schema specification
     expected_schema = StructType([
         StructField("product_id", StringType(), True),
@@ -80,6 +99,8 @@ def validate_products_data(df_products):
     validate_schema(df_products, expected_schema)
     # Remove duplicates (if any) based on product_id
     df_products = df_products.dropDuplicates(["product_id"])
+
+    logger.info(f"Finished validated product data.")
 
     return df_products
 
@@ -96,6 +117,10 @@ def validate_sales_data(df_sales):
     Returns:
     DataFrame: DataFrame with validated data.
     """
+
+    logger.info("Validating sales data...")
+
+
     # Enforcing data types on raw data before they can be treated
     df_sales_validated = df_sales.withColumn('quantity', F.col('quantity').cast('int')) \
             .withColumn('price', F.col('price').cast(DecimalType(10,2))) \
@@ -132,6 +157,8 @@ def validate_sales_data(df_sales):
 
     validate_schema(df_sales_validated, expected_schema)
 
+    logger.info(f"Finished validating sales data.")
+
     return df_sales_validated
 
 # Stores data validation
@@ -148,6 +175,9 @@ def validate_stores_data(df_stores):
     Returns:
     DataFrame: The input DataFrame after schema validation.
     """
+
+    logger.info("Validating stores data...")
+
     # Expected schema specification
     expected_schema = StructType([
         StructField("store_id", StringType(), True),
@@ -159,6 +189,8 @@ def validate_stores_data(df_stores):
 
     # Remove duplicates (if any) based on store_id
     df_stores = df_stores.dropDuplicates(["store_id"])
+
+    logger.info(f"Finished validating stores data.")
 
     return df_stores
 
@@ -177,6 +209,10 @@ def aggregate_sales_amount_store_category(df_products, df_sales):
     Returns:
     DataFrame: Aggregated sales data with total revenue per store/category.
     """
+
+    logger.info(f"Processing aggregated sales amount for each store/category...")
+
+
     df_products_category = df_products.select('product_id','category')
     df_sales_aggregation = df_sales.join(df_products_category, 'product_id','left')
     df_sales_total_revenue = df_sales_aggregation.select('store_id', 'category', 'price') \
@@ -185,6 +221,8 @@ def aggregate_sales_amount_store_category(df_products, df_sales):
                                                 .alias('total_revenue'))
     
     df_sales_total_revenue = df_sales_total_revenue.filter(F.col('category').isNotNull())
+
+    logger.info(f"Finished processing aggregated sales amount for each store/category.")
 
     #df_sales_total_revenue.show()
     return df_sales_total_revenue
@@ -202,6 +240,9 @@ def monthly_sales_quantity_insights(df_products, df_sales):
     Returns:
     DataFrame: Aggregated sales data with total quantity sold per month/category.
     """
+
+    logger.info(f"Processing monthly sales quantity insights for each category...")
+
     df_products_category = df_products.select('product_id','category')
     df_sales_aggregation = df_sales.join(df_products_category, 'product_id','left')
     df_monthly_sales_insights = df_sales_aggregation.withColumn('year', F.year('transaction_date')) \
@@ -214,6 +255,9 @@ def monthly_sales_quantity_insights(df_products, df_sales):
 
     df_monthly_sales_insights = df_monthly_sales_insights.filter(F.col('category').isNotNull())
     #df_monthly_sales_insights.show()
+
+    logger.info(f"Finished processing monthly sales quantity insights for each category.")
+
     return df_monthly_sales_insights
 
 # Price categorization
@@ -227,6 +271,9 @@ def categorize_price(price):
     Returns:
     str: Price category ('Low', 'Medium', or 'High').
     """
+
+    logger.info(f"Processing price category...")
+
     if price < 20:
         return "Low"
     elif 20 <= price <= 100:
@@ -249,6 +296,10 @@ def enriched_data(df_products, df_stores, df_sales, add_price_category):
     Returns:
     DataFrame: Enriched sales data with optional price categorization.
     """
+
+    logger.info(f"Processing enriched sales data with product and store details.")
+
+
     df_enriched_data = df_sales.join(df_products, 'product_id','left').join(df_stores, 'store_id','left')
     df_enriched_data = df_enriched_data.select('transaction_id', 'store_name', 'location', 'product_name', 'category', 'quantity', 'transaction_date', 'price')
     #df_enriched_data.show()
@@ -263,6 +314,8 @@ def enriched_data(df_products, df_stores, df_sales, add_price_category):
                                 .filter(F.col('location').isNotNull()) \
                                 .filter(F.col('store_name').isNotNull())
 
+    logger.info(f"Finished processing enriched sales data with product and store details.")
+
     return df_enriched_data
 
 # Task: Part 3
@@ -276,14 +329,34 @@ def export_dataframe_as_parquet_with_partitions(df, output_path, partitions_list
     df (DataFrame): The DataFrame to export.
     output_path (str): Path where the Parquet file will be saved.
     partitions_list (list): List of column names by which to partition the data.
+
+    Returns:
+    None
     """
+
+    logger.info(f"Exporting DataFrame to Parquet format located at {output_path}, partitioned by {', '.join(partitions_list)}.")
+
     df.write \
     .mode("overwrite") \
     .partitionBy(*partitions_list) \
     .parquet(output_path)
 
+    logger.info(f"Finished exporting data.")
+
 # Export store revenue insights DataFrame in CSV format
 def export_dataframe_as_csv(df, output_path):
+    """
+    Export a DataFrame to a CSV file.
+
+    Arguments:
+    df (DataFrame): The DataFrame to export.
+    output_path (str): Path where the CSV file will be saved.
+
+    Returns:
+    None
+    """
+    logger.info(f"Exporting DataFrame to CSV format located at {output_path}.")
+
 
     # Temporary path to CSV files
     temp_folder = output_path.replace(".csv","_temp")
@@ -295,6 +368,8 @@ def export_dataframe_as_csv(df, output_path):
     os.rename(part_file, output_path)
     # Remove the temporary folder
     shutil.rmtree(temp_folder)
+
+    logger.info(f"Finished exporting data.")
 
 
 # Execution
