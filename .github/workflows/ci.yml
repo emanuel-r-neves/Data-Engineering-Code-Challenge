@@ -62,3 +62,10 @@ jobs:
       - name: Run the main process
         run: |
           python main.py  # Run your main script
+
+      # Step 5: Upload output files as artifacts
+      - name: Upload output files
+        uses: actions/upload-artifact@v3
+        with:
+          name: output-files
+          path: ./data/outputs/*
