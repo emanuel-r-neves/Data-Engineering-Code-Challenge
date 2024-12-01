@@ -68,4 +68,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: output-files
-          path: ./data/outputs/*
+          path: ./data/output/*
