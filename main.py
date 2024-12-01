@@ -404,7 +404,7 @@ df_aggregated_sales = aggregate_sales_amount_store_category(df_products_validate
 # 2.2. Monthly Sales Insights - Calculate the total quantity sold for each product category, grouped by month
 df_monthly_sales_quantity_insights = monthly_sales_quantity_insights(df_products_validated, df_sales_validated)
 
-# 2.3. Enrich Data - Combine the sales, products and stores datasets into a single enriched
+# 2.3. Enrich Data - Combine the sales, products and stores datasets into a single enriched dataframe
 df_enriched_data = enriched_data(df_products_validated, df_stores_validated, df_sales_validated, add_price_category = False)
 
 # 2.4. PySpark UDF - PySpark UDF to categorize products based on specified price ranges
